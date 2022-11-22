@@ -16,6 +16,7 @@
 #include <faiss/impl/PolysemousTraining.h>
 #include <faiss/impl/ProductQuantizer.h>
 #include <faiss/impl/platform_macros.h>
+#include <faiss/invlists/InvertedLists.h>
 
 namespace faiss {
 
@@ -143,6 +144,15 @@ struct MultiIndexQuantizer : Index {
             idx_t k,
             float* distances,
             idx_t* labels) const override;
+
+    void search_fixed_num(
+            idx_t n,
+            const float* x,
+            idx_t num,
+            idx_t k,
+            float* distances,
+            idx_t* labels,
+            faiss::InvertedLists* invlists);
 
     /// add and reset will crash at runtime
     void add(idx_t n, const float* x) override;

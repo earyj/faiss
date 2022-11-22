@@ -21,6 +21,7 @@
 #include <faiss/utils/utils.h>
 
 #include <faiss/IndexFlat.h>
+#include <faiss/IndexPQ.h>
 #include <faiss/impl/AuxIndexStructures.h>
 #include <faiss/impl/FaissAssert.h>
 
@@ -320,7 +321,14 @@ void IndexIVF::search(
         std::unique_ptr<float[]> coarse_dis(new float[n * nprobe]);
 
         double t0 = getmillisecs();
-        quantizer->search(n, x, nprobe, coarse_dis.get(), idx.get());
+
+        auto imi_quantizer = dynamic_cast<struct MultiIndexQuantizer*>(quantizer);
+        if(imi_quantizer != nullptr) {
+            
+            imi_quantizer->search_fixed_num(n, x, max_codes, nprobe, coarse_dis.get(), idx.get(), invlists);
+        } else {
+            quantizer->search(n, x, nprobe, coarse_dis.get(), idx.get());
+        }
 
         double t1 = getmillisecs();
         invlists->prefetch_lists(idx.get(), n * nprobe);

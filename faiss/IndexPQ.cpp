@@ -18,6 +18,8 @@
 #include <faiss/impl/DistanceComputer.h>
 #include <faiss/impl/FaissAssert.h>
 #include <faiss/utils/hamming.h>
+#include <unordered_set>
+// #include <faiss/invlists/InvertedLists.h>
 
 namespace faiss {
 
@@ -613,6 +615,7 @@ struct SemiSortedArray {
 
     // type of the heap: CMax = sort ascending
     typedef CMax<T, int> HC;
+    // 排序部分 perm[i] 表示排序数组第i个数的原下标
     std::vector<int> perm;
 
     int k; // k elements are sorted
@@ -727,10 +730,10 @@ struct MinSumK {
         bh_val = new T[heap_capacity];
         bh_ids = new int64_t[heap_capacity];
 
-        if (use_seen) {
-            int64_t n_ids = weight(M);
-            seen.resize((n_ids + 7) / 8);
-        }
+        // if (use_seen) {
+        int64_t n_ids = weight(M);
+        seen.resize((n_ids + 7) / 8);
+        // }
 
         for (int m = 0; m < M; m++)
             ssx.push_back(SSA(N));
@@ -800,6 +803,7 @@ struct MinSumK {
             // enqueue followers
             int64_t ii = ti;
             for (int m = 0; m < M; m++) {
+                // 第i个码本中对应的码字
                 int64_t n = ii & ((1L << nbit) - 1);
                 ii >>= nbit;
                 if (n + 1 >= N)
@@ -830,6 +834,148 @@ struct MinSumK {
             }
             terms[k] = ti;
         }
+    }
+
+    int run_with_nums(
+            const T* x,
+            int64_t ldx,
+            T* sums,
+            int64_t* terms,
+            int64_t num,
+            InvertedLists* invlists) {
+        
+        heap_size = 0;
+
+        for (int m = 0; m < M; m++) {
+            ssx[m].init(x);
+            x += ldx;
+        }
+        std::unordered_set<int64_t> metIds;
+
+        int64_t nvecs = 0;
+        // num of centroids
+        int64_t i = 0;
+        { // initial result: take min for all elements
+            T sum = 0;
+            int64_t id = 0;
+
+            for (int m = 0; m < M; m++) {
+                sum += ssx[m].get_0();
+                id += int64_t(ssx[m].get_ord(0)) << (nbit * m);
+            }
+            
+            int list_sz = invlists->list_size(id);
+            const int64_t* id_poslist = invlists->get_ids(id);
+            if(list_sz == 2 && id_poslist[0] == -1) {
+                // 属于某一重组后的集群组
+                // printf("entering------ %ld \n", centroid_id);
+                int64_t re_centroid_id = id_poslist[1];
+                metIds.insert(re_centroid_id);
+
+                int64_t sz = invlists->list_size(re_centroid_id);
+                terms[i] = re_centroid_id;
+                sums[i] = sum;
+                nvecs += sz;
+                // printf("遇到重组之后的中心点之一 %ld --> %ld \n", centroid_id, re_centroid_id);
+            } else {
+                metIds.insert(id);
+                terms[i] = id;
+                sums[i] = sum;
+                nvecs += list_sz;
+            }
+
+            // enqueue followers
+            for(int m = 0;m < M;m++) {
+                heap_push<HC>(
+                        ++heap_size,
+                        bh_val,
+                        bh_ids,
+                        sum + ssx[m].get_diff(1),
+                        weight(m));
+            }
+            i++;
+        }
+        assert(i == 1);
+
+        while (nvecs < num) {
+            
+            assert(heap_size > 0);
+            // printf("loop: %ld ------------\n", i);
+
+            T sum = bh_val[0];
+            int64_t ti = bh_ids[0];
+
+            do {
+                heap_pop<HC>(heap_size--, bh_val, bh_ids);
+            } while (heap_size > 0 && bh_ids[0] == ti);
+            assert(heap_size > 0);
+
+            // enqueue followers
+            int64_t ii = ti;
+            // true id of centroid
+            int64_t centroid_id = 0;
+            for (int m = 0; m < M; m++) {
+                // 第i个码本中码字对应的顺序编号
+                int64_t n = ii & ((1L << nbit) - 1);
+                centroid_id += int64_t(ssx[m].get_ord(n)) << (nbit * m);
+                ii >>= nbit;
+
+                // 将 按距离排序的 下一个码字入堆
+                if (n + 1 < N)
+                    enqueue_follower(ti, m, n, sum);
+            }
+
+            int list_sz = invlists->list_size(centroid_id);
+
+            if(list_sz == 0 || metIds.count(centroid_id) == 1U) {
+                continue;
+            }
+
+            // 判断该中心点是否是属于重组后的集群组
+            if(list_sz == 2) {
+                const int64_t* id_poslist = invlists->get_ids(centroid_id);
+                // 属于某一重组后的集群组
+                if(id_poslist[0] == -1) {
+                    // printf("entering------ %ld \n", centroid_id);
+                    int64_t re_centroid_id = id_poslist[1];
+                    if(metIds.count(re_centroid_id) == 0U) {
+                        // mark_seen(re_centroid_id);
+                        metIds.insert(re_centroid_id);
+
+                        int64_t sz = invlists->list_size(re_centroid_id);
+                        terms[i] = re_centroid_id;
+                        sums[i] = sum;
+                        nvecs += sz;
+                        i++;
+                        // printf("遇到重组之后的中心点之一 %ld --> %ld \n", centroid_id, re_centroid_id);
+                    }
+                    continue;
+                }
+            }
+
+            // mark_seen(centroid_id);
+            metIds.insert(centroid_id);
+            terms[i] = centroid_id;
+            sums[i] = sum;
+
+            nvecs += list_sz;
+            i++;
+        }
+
+        // 检查返回的倒排列表
+        std::unordered_set<int64_t> idSet(terms, terms + i);
+        // assert(idSet.size() == i);
+        if(idSet.size() != i) {
+            printf("idSet size: %ld, i: %ld\n", idSet.size(), i);
+        }
+
+        // assert(i < K);
+        for(int j = i;j < K;j++) {
+            terms[j] = -1;
+        }
+
+        // return num of centroids
+        return i;
     }
 
     void enqueue_follower(int64_t ti, int m, int n, T sum) {
@@ -938,6 +1084,68 @@ void MultiIndexQuantizer::search(
                         distances + i * k,
                         labels + i * k);
             }
+        }
+    }
+}
+
+void MultiIndexQuantizer::search_fixed_num(
+        idx_t n,
+        const float* x,
+        idx_t num,
+        idx_t k,
+        float* distances,
+        idx_t* labels,
+        InvertedLists* invlists){
+    if (n == 0)
+        return;
+
+    FAISS_THROW_IF_NOT(k > 0);
+
+    // the allocation just below can be severe...
+    idx_t bs = multi_index_quantizer_search_bs;
+    if (n > bs) {
+        for (idx_t i0 = 0; i0 < n; i0 += bs) {
+            idx_t i1 = std::min(i0 + bs, n);
+            if (verbose) {
+                printf("MultiIndexQuantizer::search: %" PRId64 ":%" PRId64
+                       " / %" PRId64 "\n",
+                       i0,
+                       i1,
+                       n);
+            }
+            search_fixed_num(
+                    i1 - i0,
+                    x + i0 * d,
+                    num,
+                    k,
+                    distances + i0 * k,
+                    labels + i0 * k,
+                    invlists);
+        }
+        return;
+    }
+
+    float* dis_tables = new float[n * pq.ksub * pq.M];
+    ScopeDeleter<float> del(dis_tables);
+
+    pq.compute_distance_tables(n, x, dis_tables);
+
+// #pragma omp parallel if (n > 1)
+    {
+        MinSumK<float, SemiSortedArray<float>, false> msk(
+                k, pq.M, pq.nbits, pq.ksub);
+// #pragma omp parallel for
+        for (int i = 0; i < n; i++) {
+            // printf("-----------------query %d ----------------\n", i);
+            int64_t num_centroids = msk.run_with_nums(
+                    dis_tables + i * pq.ksub * pq.M,
+                    pq.ksub,
+                    distances + i * k,
+                    labels + i * k,
+                    num,
+                    invlists);
+            // if(i == 49 || i == 9476)
+                // printf("query %d need to scan %ld postlists\n", i, num_centroids);
         }
     }
 }

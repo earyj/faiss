@@ -35,7 +35,7 @@ tmpdir = '/tmp/'
 
 if stage == 0:
     # train the index
-    xt = fvecs_read("sift1M/sift_learn.fvecs")
+    xt = fvecs_read("/home/lfy/vecdb/data/sift/sift_learn.fvecs")
     index = faiss.index_factory(xt.shape[1], "IVF4096,Flat")
     print("training index")
     index.train(xt)
@@ -46,7 +46,7 @@ if stage == 0:
 if 1 <= stage <= 4:
     # add 1/4 of the database to 4 independent indexes
     bno = stage - 1
-    xb = fvecs_read("sift1M/sift_base.fvecs")
+    xb = fvecs_read("/home/lfy/vecdb/data/sift/sift_base.fvecs")
     i0, i1 = int(bno * xb.shape[0] / 4), int((bno + 1) * xb.shape[0] / 4)
     index = faiss.read_index(tmpdir + "trained.index")
     print("adding vectors %d:%d" % (i0, i1))
@@ -78,8 +78,8 @@ if stage == 6:
     index.nprobe = 16
 
     # load query vectors and ground-truth
-    xq = fvecs_read("sift1M/sift_query.fvecs")
-    gt = ivecs_read("sift1M/sift_groundtruth.ivecs")
+    xq = fvecs_read("/home/lfy/vecdb/data/sift/sift_query.fvecs")
+    gt = ivecs_read("/home/lfy/vecdb/data/sift/sift_groundtruth.ivecs")
 
     D, I = index.search(xq, 5)
 

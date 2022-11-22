@@ -30,11 +30,11 @@ int main() {
     int d = 128;
 
     // size of the database we plan to index
-    size_t nb = 1000 * 1000;
+    size_t nb = 100 * 100;
 
     // make a set of nt training vectors in the unit cube
     // (could be the database)
-    size_t nt = 100 * 1000;
+    size_t nt = 10 * 100;
 
     //---------------------------------------------------------------
     // Define the core quantizer
@@ -73,7 +73,8 @@ int main() {
 
     // define the number of probes. 2048 is for high-dim, overkilled in practice
     // Use 4-1024 depending on the trade-off speed accuracy that you want
-    index.nprobe = 2048;
+    index.nprobe = 512;
+    index.max_codes = 1000;
 
     std::mt19937 rng;
     std::uniform_real_distribution<> distrib;
