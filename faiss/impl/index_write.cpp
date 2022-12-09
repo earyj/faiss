@@ -255,6 +255,7 @@ void write_InvertedLists(const InvertedLists* ils, IOWriter* f) {
         WRITE1(h);
         WRITE1(ails->nlist);
         WRITE1(ails->code_size);
+        WRITEVECTOR(ils->recluster_map);
         // here we store either as a full or a sparse data buffer
         size_t n_non0 = 0;
         for (size_t i = 0; i < ails->nlist; i++) {

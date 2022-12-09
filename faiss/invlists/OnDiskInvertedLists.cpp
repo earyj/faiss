@@ -436,6 +436,10 @@ void OnDiskInvertedLists::resize(size_t list_no, size_t new_size) {
     locks->unlock_1(list_no);
 }
 
+void OnDiskInvertedLists::initial_slots() {
+    slots.resize(0);
+}
+
 void OnDiskInvertedLists::resize_locked(size_t list_no, size_t new_size) {
     List& l = lists[list_no];
 
@@ -447,9 +451,11 @@ void OnDiskInvertedLists::resize_locked(size_t list_no, size_t new_size) {
     // otherwise we release the current slot, and find a new one
 
     locks->lock_2();
-    free_slot(l.offset, l.capacity);
+    free_slot(l.offset, 0);
+    // free_slot(l.offset, 0);
+    // free_slot(l.offset, 0);
 
-    List new_l;
+    List new_l = List();
 
     if (new_size == 0) {
         new_l = List();
@@ -478,23 +484,35 @@ void OnDiskInvertedLists::resize_locked(size_t list_no, size_t new_size) {
     locks->unlock_2();
 }
 
+// capacity: size of bytes
 size_t OnDiskInvertedLists::allocate_slot(size_t capacity) {
     // should hold lock2
-
     auto it = slots.begin();
+    // printf("total bytes : %ld\n", totsize);
+    // if(slots.size() == 1U) {
+    //     printf("size: %d\n", slots.back().capacity);
+    //     printf("totolsize: %ld\n", totsize);
+    //     assert(slots.back().capacity != totsize);
+    //     // slots.resize(0);
+    // }
+    
     while (it != slots.end() && it->capacity < capacity) {
         it++;
     }
 
     if (it == slots.end()) {
         // not enough capacity
-        size_t new_size = totsize == 0 ? 32 : totsize * 2;
+        printf("resizing total file--------\n");
+        size_t new_size = totsize == 0 ? 32 : (size_t)(2 * totsize);
         while (new_size - totsize < capacity) {
-            new_size *= 2;
+            float tmp = 1.2 * new_size;
+            new_size = (int)tmp;
         }
+        printf("更新之前的totalsize: %ld\n", totsize);
         locks->lock_3();
         update_totsize(new_size);
         locks->unlock_3();
+        printf("after update: %ld \n", totsize);
         it = slots.begin();
         while (it != slots.end() && it->capacity < capacity) {
             it++;
@@ -674,6 +692,7 @@ void OnDiskInvertedListsIOHook::write(const InvertedLists* ils, IOWriter* f)
     WRITE1(h);
     WRITE1(ils->nlist);
     WRITE1(ils->code_size);
+    WRITEVECTOR(ils->recluster_map);
     const OnDiskInvertedLists* od =
             dynamic_cast<const OnDiskInvertedLists*>(ils);
     // this is a POD object
@@ -697,6 +716,7 @@ InvertedLists* OnDiskInvertedListsIOHook::read(IOReader* f, int io_flags)
     od->read_only = io_flags & IO_FLAG_READ_ONLY;
     READ1(od->nlist);
     READ1(od->code_size);
+    READVECTOR(od->recluster_map);
     // this is a POD object
     READVECTOR(od->lists);
     {

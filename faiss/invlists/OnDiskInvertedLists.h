@@ -99,6 +99,8 @@ struct OnDiskInvertedLists : InvertedLists {
 
     void resize(size_t list_no, size_t new_size) override;
 
+    void initial_slots();
+
     // copy all inverted lists into *this, in compact form (without
     // allocating slots)
     size_t merge_from(

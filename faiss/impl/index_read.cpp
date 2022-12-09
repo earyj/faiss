@@ -197,6 +197,7 @@ InvertedLists* read_InvertedLists(IOReader* f, int io_flags) {
         auto ails = new ArrayInvertedLists(0, 0);
         READ1(ails->nlist);
         READ1(ails->code_size);
+        READVECTOR(ails->recluster_map);
         ails->ids.resize(ails->nlist);
         ails->codes.resize(ails->nlist);
         std::vector<size_t> sizes(ails->nlist);
@@ -220,8 +221,10 @@ InvertedLists* read_InvertedLists(IOReader* f, int io_flags) {
         // as "il"
         int h2 = (io_flags & 0xffff0000) | (fourcc("il__") & 0x0000ffff);
         size_t nlist, code_size;
+        std::vector<int64_t> recluster_map;
         READ1(nlist);
         READ1(code_size);
+        READVECTOR(recluster_map);
         std::vector<size_t> sizes(nlist);
         read_ArrayInvertedLists_sizes(f, sizes);
         return InvertedListsIOHook::lookup(h2)->read_ArrayInvertedLists(

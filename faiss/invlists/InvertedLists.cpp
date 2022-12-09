@@ -21,7 +21,9 @@ namespace faiss {
  ******************************************/
 
 InvertedLists::InvertedLists(size_t nlist, size_t code_size)
-        : nlist(nlist), code_size(code_size) {}
+        : nlist(nlist), code_size(code_size) {
+            recluster_map.resize(nlist, -1);
+        }
 
 InvertedLists::~InvertedLists() {}
 
@@ -32,6 +34,10 @@ InvertedLists::idx_t InvertedLists::get_single_id(size_t list_no, size_t offset)
     idx_t id = ids[offset];
     release_ids(list_no, ids);
     return id;
+}
+
+void InvertedLists::remap_cluster(idx_t origin_cid, idx_t dest_cid) {
+    recluster_map[origin_cid] = dest_cid;
 }
 
 void InvertedLists::release_codes(size_t, const uint8_t*) const {}

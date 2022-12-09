@@ -866,10 +866,10 @@ struct MinSumK {
             
             int list_sz = invlists->list_size(id);
             const int64_t* id_poslist = invlists->get_ids(id);
-            if(list_sz == 2 && id_poslist[0] == -1) {
+            if(invlists->recluster_map[id] != -1) {
                 // 属于某一重组后的集群组
                 // printf("entering------ %ld \n", centroid_id);
-                int64_t re_centroid_id = id_poslist[1];
+                int64_t re_centroid_id = invlists->recluster_map[id];
                 metIds.insert(re_centroid_id);
 
                 int64_t sz = invlists->list_size(re_centroid_id);
@@ -897,7 +897,7 @@ struct MinSumK {
         }
         assert(i == 1);
 
-        while (nvecs < num) {
+        while (nvecs < num && i < K) {
             
             assert(heap_size > 0);
             // printf("loop: %ld ------------\n", i);
@@ -932,25 +932,21 @@ struct MinSumK {
             }
 
             // 判断该中心点是否是属于重组后的集群组
-            if(list_sz == 2) {
-                const int64_t* id_poslist = invlists->get_ids(centroid_id);
-                // 属于某一重组后的集群组
-                if(id_poslist[0] == -1) {
-                    // printf("entering------ %ld \n", centroid_id);
-                    int64_t re_centroid_id = id_poslist[1];
-                    if(metIds.count(re_centroid_id) == 0U) {
-                        // mark_seen(re_centroid_id);
-                        metIds.insert(re_centroid_id);
+            if(invlists->recluster_map[centroid_id] != -1) {
+                // printf("entering------ %ld \n", centroid_id);
+                int64_t re_centroid_id = invlists->recluster_map[centroid_id];
+                if(metIds.count(re_centroid_id) == 0U) {
+                    // mark_seen(re_centroid_id);
+                    metIds.insert(re_centroid_id);
 
-                        int64_t sz = invlists->list_size(re_centroid_id);
-                        terms[i] = re_centroid_id;
-                        sums[i] = sum;
-                        nvecs += sz;
-                        i++;
-                        // printf("遇到重组之后的中心点之一 %ld --> %ld \n", centroid_id, re_centroid_id);
-                    }
-                    continue;
+                    int64_t sz = invlists->list_size(re_centroid_id);
+                    terms[i] = re_centroid_id;
+                    sums[i] = sum;
+                    nvecs += sz;
+                    i++;
+                    // printf("遇到重组之后的中心点之一 %ld --> %ld \n", centroid_id, re_centroid_id);
                 }
+                continue;
             }
 
             // mark_seen(centroid_id);
@@ -969,7 +965,7 @@ struct MinSumK {
             printf("idSet size: %ld, i: %ld\n", idSet.size(), i);
         }
 
-        // assert(i < K);
+        assert(i <= K);
         for(int j = i;j < K;j++) {
             terms[j] = -1;
         }

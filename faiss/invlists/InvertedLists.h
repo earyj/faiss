@@ -33,7 +33,11 @@ struct InvertedLists {
     size_t nlist;     ///< number of possible key values
     size_t code_size; ///< code size per vector in bytes
 
+    std::vector<idx_t> recluster_map;
+
     InvertedLists(size_t nlist, size_t code_size);
+
+    void remap_cluster(idx_t origin_cid, idx_t dest_cid);
 
     /// used for BlockInvertedLists, where the codes are packed into groups
     /// and the individual code size is meaningless
